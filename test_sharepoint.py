@@ -13,8 +13,6 @@ client_secret = os.getenv('CLIENT_SECRET')
 site_url = os.getenv('SITE_URL')
 resource = os.getenv('RESOURCE')
 
-
-
 client = SharePointClient(tenant_id, client_id, client_secret, resource)
 site_id = client.get_site_id(site_url)
 print("Site ID:", site_id)
