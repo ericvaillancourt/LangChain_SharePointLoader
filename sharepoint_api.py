@@ -135,81 +135,87 @@ class SharePointClient:
         self.download_file(download_url, local_save_path, file_name)
 
     def load_sharepoint_document(self, site_id, drive_id, file_id, file_name, file_type):
-        # Obtenez l'URL de téléchargement et le nom du fichier
+        # Get the download URL and the file name by querying the Microsoft Graph API
         file_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}'
-        headers = {'Authorization': f'Bearer {self.access_token}'}
-        response = requests.get(file_url, headers=headers)
-        file_data = response.json()
-        download_url = file_data['@microsoft.graph.downloadUrl']
+        headers = {'Authorization': f'Bearer {self.access_token}'}  # Use the stored access token for authorization
+        response = requests.get(file_url, headers=headers)  # Make the HTTP request to get file details
+        file_data = response.json()  # Parse the JSON response to get file data
+        download_url = file_data['@microsoft.graph.downloadUrl']  # Extract the direct download URL from the response
 
-        # Obtenez la réponse
-        response = requests.get(download_url, headers=headers)
+        # Get the file content from the download URL
+        response = requests.get(download_url, headers=headers)  # Make the HTTP request to download the file
 
-        # Créez un objet BytesIO à partir de la réponse
-        stream = io.BytesIO(response.content)
+        # Create a BytesIO object from the response content, which allows for reading and writing bytes in memory
+        stream = io.BytesIO(response.content)  # This is useful for handling binary data like files without saving to disk
 
+        # Check the file type and use the appropriate custom loader to handle the file content
         if file_type == 'application/pdf':
-            # Utilisez CustomPDFLoader pour charger et diviser le contenu du PDF
+            # Use CustomPDFLoader to handle PDF files; it initializes with the stream and file name
             loader = CustomPDFLoader(stream, file_name)
             return loader
         elif file_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-            # Utilisez CustomWordLoader pour charger et diviser le contenu du document Word
+            # Use CustomWordLoader for Word documents to handle and potentially split the document's content
             loader = CustomWordLoader(stream, file_name)
             return loader
         elif file_type == 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-            # Utilisez CustomWordLoader pour charger et diviser le contenu du document Word
+            # Use CustomPPTLoader for PowerPoint presentations to read and split the presentation into slides
             loader = CustomPPTLoader(stream, file_name)
             return loader
         elif file_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-            # Utilisez CustomWordLoader pour charger et diviser le contenu du document Word
+            # Use CustomExcelLoader for Excel spreadsheets to read and possibly split the sheets into separate parts
             loader = CustomExcelLoader(stream, file_name)
             return loader
         elif file_type in ['text/csv', 'text/plain']:
+            # Use CustomTextLoader for plain text or CSV files to handle and split text as needed
             loader = CustomTextLoader(stream, file_name)
             return loader
         else:
-            pass  # À implémenter
+            pass  # Placeholder for additional file types that may need to be implemented in the future
+
 
 
 class CustomPDFLoader(BaseLoader):
     def __init__(self, stream: BytesIO, filename: str, password: Optional[Union[str, bytes]] = None,
                  extract_images: bool = False):
+        # Initialize with a binary stream, file name, optional password, and an image extraction flag
         self.stream = stream
         self.filename = filename
+        # Initialize a PDF parser with optional password protection and image extraction settings
         self.parser = PyPDFParser(password=password, extract_images=extract_images)
 
     def load(self) -> List[Document]:
+        # Convert the binary stream into a Blob object which is required by the parser
         blob = Blob.from_data(self.stream.getvalue())
+        # Parse the PDF and convert each page or segment into a separate document object
         documents = list(self.parser.parse(blob))
 
-        # Ajoutez les métadonnées à chaque document
+        # Add the filename as metadata to each document for identification
         for doc in documents:
             doc.metadata.update({'source': self.filename})
 
         return documents
 
-
 class CustomWordLoader(BaseLoader):
     def __init__(self, stream, filename: str):
+        # Initialize with a binary stream and filename
         self.stream = stream
         self.filename = filename
 
     def load_and_split(self, text_splitter=None):
-        # Utilisez python-docx pour lire le contenu du document Word
+        # Use python-docx to parse the Word document from the binary stream
         doc = DocxDocument(self.stream)
-
-        # Convertissez le contenu du document en texte
+        # Extract and concatenate all paragraph texts into a single string
         text = "\n".join([p.text for p in doc.paragraphs])
 
-        # Vérifiez si text_splitter est None
+        # Check if a text splitter utility is provided
         if text_splitter is not None:
-            # Si text_splitter est fourni, appliquez-le au texte
+            # Use the provided splitter to divide the text into manageable documents
             split_text = text_splitter.create_documents([text])
         else:
-            # Si text_splitter n'est pas fourni, utilisez simplement le texte tel quel
+            # Without a splitter, treat the entire text as one document
             split_text = [{'text': text, 'metadata': {'source': self.filename}}]
 
-        # Ajoutez les métadonnées à chaque document
+        # Add source metadata to each resulting document
         for doc in split_text:
             if isinstance(doc, dict):
                 doc['metadata'] = {**doc.get('metadata', {}), 'source': self.filename}
@@ -218,98 +224,105 @@ class CustomWordLoader(BaseLoader):
 
         return split_text
 
-
 class CustomExcelLoader(BaseLoader):
     def __init__(self, stream, filename: str):
+        # Initialize with a binary stream and filename
         self.stream = stream
         self.filename = filename
 
     def load_and_split(self, text_splitter=None):
-        # Utilisez pandas pour lire le contenu du fichier Excel
+        # Use pandas to load the Excel file from the binary stream
         xls = pd.ExcelFile(self.stream)
+        # Get the list of all sheet names in the workbook
         sheet_names = xls.sheet_names
 
         split_sheets = []
         for sheet in sheet_names:
+            # Parse each sheet into a DataFrame
             df = xls.parse(sheet)
-
-            # Convertissez le DataFrame en texte, chaque ligne du DataFrame est une ligne de la chaîne
+            # Convert the DataFrame to a single string with each cell value separated by new lines
             text = '\n'.join(df.values.astype(str).flatten().tolist())
 
-            # Appliquez le text_splitter au texte si il est fourni
+            # Check if a text splitter is provided to further divide the sheet content
             if text_splitter is not None:
+                # Use the splitter to create documents from the text
                 split_text = text_splitter.create_documents([text])
-                # Ajoutez les métadonnées à chaque document et ajoutez chaque document à split_sheets
+                # Add metadata to each document
                 for doc in split_text:
                     doc.metadata = {'source': self.filename, 'page': sheet}
                 split_sheets.extend(split_text)
             else:
-                # Créez un objet Document avec le texte et les métadonnées
+                # Without a splitter, treat the entire sheet text as one document
                 doc = Document(text, metadata={'source': self.filename, 'page': sheet})
                 split_sheets.append(doc)
 
         return split_sheets
 
-
 class CustomPPTLoader(BaseLoader):
     def __init__(self, stream, filename):
+        # Initialize with a binary stream and filename
         self.stream = stream
         self.filename = filename
 
     def load_and_split(self, text_splitter=None):
-        # Utilisez python-pptx pour lire le contenu du fichier PowerPoint
+        # Use python-pptx to parse the PowerPoint file from the binary stream
         prs = Presentation(self.stream)
-
-        # Créez une liste pour stocker les documents
+        # Prepare to collect documents
         documents = []
 
-        # Parcourez chaque diapositive
+        # Iterate over each slide in the presentation
         for i, slide in enumerate(prs.slides):
-            # Extraire le texte de la diapositive
-            slide_text = "\n".join([paragraph.text for shape in slide.shapes if shape.has_text_frame for paragraph in
-                                    shape.text_frame.paragraphs])
+            # Extract all text content from each slide
+            slide_text = "\n".join([paragraph.text for shape in slide.shapes if shape.has_text_frame for paragraph in shape.text_frame.paragraphs])
 
-            # Vérifiez si text_splitter est None
+            # Check if a text splitter is provided
             if text_splitter is None:
-                # Créez un document pour chaque diapositive
+                # Treat each slide's text as a single document
                 doc = {'text': slide_text, 'metadata': {'source': self.filename, 'page': i + 1}}
                 documents.append(doc)
             else:
-                # Appliquez le text_splitter au texte de la diapositive
+                # Use the splitter to divide the slide text into smaller documents
                 split_text = text_splitter.create_documents([slide_text])
-
-                # Ajoutez les métadonnées à chaque document dans split_text
+                # Add metadata and collect each document
                 for doc in split_text:
                     doc.metadata = {'source': self.filename, 'page': i + 1}
-
-                # Ajoutez les documents à la liste
                 documents.extend(split_text)
 
         return documents
 
 
+
 class CustomTextLoader(BaseLoader):
     def __init__(self, stream, filename: str):
+        # Initialize the loader with a stream and a filename
+        # The stream should be a BytesIO or similar object containing the binary data of the text file
         self.stream = stream
         self.filename = filename
 
     def load_and_split(self, text_splitter=None):
-        # Utilisez la bibliothèque standard de Python pour lire le contenu du fichier texte
+        # Use the Python standard library to read the text content from the binary stream
+        # Decode the binary data to 'utf-8' to convert it into a string
         text = self.stream.read().decode('utf-8')
 
-        # Vérifiez si text_splitter est None
+        # Check if a text splitter is provided as an argument
+        # A text splitter would typically be an object that can take a string and divide it into smaller, meaningful units (like paragraphs or sections)
         if text_splitter is not None:
-            # Si text_splitter est fourni, appliquez-le au texte
+            # If a text splitter is provided, use it to split the text into documents
+            # This allows the text to be processed in chunks that are easier to manage or more meaningful
             split_text = text_splitter.create_documents([text])
         else:
-            # Si text_splitter n'est pas fourni, utilisez simplement le texte tel quel
+            # If no text splitter is provided, treat the entire text as a single document
+            # This approach can be useful when the entire text needs to be processed as one unit
             split_text = [{'text': text, 'metadata': {'source': self.filename}}]
 
-        # Ajoutez les métadonnées à chaque document
+        # Add metadata to each document in the list of split or whole text
+        # Metadata here includes the source filename which can be useful for tracking where the text came from
         for doc in split_text:
             if isinstance(doc, dict):
+                # If the document is a dictionary, update the metadata directly
                 doc['metadata'] = {**doc.get('metadata', {}), 'source': self.filename}
             else:
+                # If the document is not a dictionary, it may be a more complex object that has a metadata attribute
                 doc.metadata = {**doc.metadata, 'source': self.filename}
 
         return split_text
