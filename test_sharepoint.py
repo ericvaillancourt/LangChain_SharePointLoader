@@ -32,6 +32,13 @@ for content in contents:
     print(f"Name: {content['name']}, Type: {content['type']}, MimeType: {content.get('mimeType', 'N/A')}, Path: {content['path']}")
 
 local_save_path = "data"
+# download = client.download_folder_contents(site_id, drive_id, folder_id, local_save_path)
+
+file_id = contents[0]['id']
+file_type = contents[0]['mimeType']
+file_name = contents[0]['path']
+# download = client.download_file_contents(site_id, drive_id, file_id, local_save_path)
+
 
 loader = client.load_sharepoint_document(site_id, drive_id, file_id, file_name, file_type)
 
@@ -40,6 +47,8 @@ text_splitter = CharacterTextSplitter(
     chunk_size=200,
     chunk_overlap=0
 )
+# docs = loader.load_and_split(text_splitter=text_splitter)
 docs = loader.load_and_split()
 print(docs)
 print(len(docs))
+# print(len(docs[1].page_content))
