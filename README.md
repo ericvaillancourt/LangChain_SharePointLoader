@@ -23,11 +23,11 @@ Before you begin, ensure you have the following:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-github-username/sharepoint-document-management.git
+   git clone https://github.com/ericvaillancourt/LangChain_SharePointLoader
    ```
 2. Navigate to the cloned directory:
    ```bash
-   cd sharepoint-document-management
+   cd LangChain_SharePointLoader
    ```
 3. Install required packages:
    ```bash
