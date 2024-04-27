@@ -2,6 +2,8 @@
 
 This repository provides a set of tools and scripts designed to interact with Microsoft SharePoint to manage and process documents. Utilizing Python, this project simplifies tasks such as retrieving, managing, and processing documents stored in SharePoint.
 
+You can read the full [article](https://medium.com/@eric_vaillancourt/filling-the-gap-developing-a-custom-solution-for-sharepoint-integration-with-langchain-d961f7a06c96)
+
 ## Features
 
 - Retrieve site and drive IDs from SharePoint
