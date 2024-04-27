@@ -10,3 +10,5 @@ langchain-core==0.1.46
 langchain-text-splitters==0.0.1
 langsmith==0.1.51
 O365 # for demo1.py
+unstructured==0.13.4  # for demo1.py
+pymupdf # for demo1.py

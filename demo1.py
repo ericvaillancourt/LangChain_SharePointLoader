@@ -6,11 +6,12 @@ load_dotenv()
 
 O365_CLIENT_ID = os.environ.get('O365_CLIENT_ID')
 O365_CLIENT_SECRET = os.environ.get('O365_CLIENT_SECRET')
+DOCUMENT_LIBRARY_ID = os.environ.get('DOCUMENT_LIBRARY_ID')
 
 loader = SharePointLoader(
-    document_library_id="b!C7H6KUXEp0yjqg1wd184anbhRPIrEYpPlKEpYFiANAfXDSAd-6JAQqfzbtvkeV5_", 
-    folder_path="/docs", 
-    auth_with_token=False)
+    document_library_id=DOCUMENT_LIBRARY_ID, 
+    folder_path="/pptx", 
+    auth_with_token=True)
 #
 documents = loader.load()
 print(documents)
