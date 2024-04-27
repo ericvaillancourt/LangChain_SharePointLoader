@@ -15,7 +15,7 @@ This repository provides a set of tools and scripts designed to interact with Mi
 
 Before you begin, ensure you have the following:
 
-- Python 3.6 or higher
+- Python 3.11 or higher
 - Access to a Microsoft SharePoint instance
 - Client credentials for accessing Microsoft Graph API
 
