@@ -3,10 +3,10 @@ from dotenv import load_dotenv
 from langchain_text_splitters import CharacterTextSplitter
 from sharepoint_api import SharePointClient
 
-# Charger les variables d'environnement du fichier .env
+# Load environment variables from .env file
 load_dotenv()
 
-# Récupération des variables depuis les variables d'environnement
+# Retrieval of variables from environment variables
 tenant_id = os.getenv('TENANT_ID')
 client_id = os.getenv('CLIENT_ID')
 client_secret = os.getenv('CLIENT_SECRET')
@@ -32,10 +32,11 @@ for content in contents:
     print(f"Name: {content['name']}, Type: {content['type']}, MimeType: {content.get('mimeType', 'N/A')}, Path: {content['path']}")
 
 local_save_path = "data"
-# download = client.download_folder_contents(site_id, drive_id, folder_id, local_save_path)
+download = client.download_folder_contents(site_id, drive_id, folder_id, local_save_path)
 
-local_save_path = "data"
-text_splitter = CharacterTextSplitter(separator="\n", chunk_size=200, chunk_overlap=0)
+text_splitter = CharacterTextSplitter(separator="\n", 
+                                      chunk_size=200, 
+                                      chunk_overlap=0)
 
 for content in contents:
     print(f"Processing file: {content['name']}")
@@ -45,10 +46,10 @@ for content in contents:
     file_name = content['path']
 
     loader = client.load_sharepoint_document(site_id, drive_id, file_id, file_name, file_type)
-    # docs = loader.load_and_split()  # Utilisation de text_splitter si nécessaire, comme commenté ci-dessous
-    docs = loader.load_and_split(text_splitter=text_splitter)  # Décommentez cette ligne si vous souhaitez utiliser le text splitter spécifique.
+    # docs = loader.load_and_split()  # Use text_splitter if needed, as commented out below
+    docs = loader.load_and_split(text_splitter=text_splitter)  # Uncomment this line if you want to use the specific text splitter.
 
     print(f"Document: {file_name}")
     print(docs)
     print("Number of chunks:", len(docs))
-    # print("Length of second chunk's content:", len(docs[1].page_content))  # Décommentez si le modèle Document inclut `page_content`
+    # print("Length of second chunk's content:", len(docs[1].page_content))  # Uncomment if the Document model includes `page_content`
