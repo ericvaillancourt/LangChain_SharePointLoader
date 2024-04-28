@@ -292,37 +292,28 @@ class CustomPPTLoader(BaseLoader):
 
 
 
+import chardet
+
 class CustomTextLoader(BaseLoader):
     def __init__(self, stream, filename: str):
-        # Initialize the loader with a stream and a filename
-        # The stream should be a BytesIO or similar object containing the binary data of the text file
         self.stream = stream
         self.filename = filename
 
     def load_and_split(self, text_splitter=None):
-        # Use the Python standard library to read the text content from the binary stream
-        # Decode the binary data to 'utf-8' to convert it into a string
-        text = self.stream.read().decode('utf-8')
+        # Use chardet to detect the encoding of the stream
+        rawdata = self.stream.read()
+        result = chardet.detect(rawdata)
+        text = rawdata.decode(result['encoding'])
 
-        # Check if a text splitter is provided as an argument
-        # A text splitter would typically be an object that can take a string and divide it into smaller, meaningful units (like paragraphs or sections)
         if text_splitter is not None:
-            # If a text splitter is provided, use it to split the text into documents
-            # This allows the text to be processed in chunks that are easier to manage or more meaningful
             split_text = text_splitter.create_documents([text])
         else:
-            # If no text splitter is provided, treat the entire text as a single document
-            # This approach can be useful when the entire text needs to be processed as one unit
             split_text = [{'text': text, 'metadata': {'source': self.filename}}]
 
-        # Add metadata to each document in the list of split or whole text
-        # Metadata here includes the source filename which can be useful for tracking where the text came from
         for doc in split_text:
             if isinstance(doc, dict):
-                # If the document is a dictionary, update the metadata directly
                 doc['metadata'] = {**doc.get('metadata', {}), 'source': self.filename}
             else:
-                # If the document is not a dictionary, it may be a more complex object that has a metadata attribute
                 doc.metadata = {**doc.metadata, 'source': self.filename}
 
         return split_text

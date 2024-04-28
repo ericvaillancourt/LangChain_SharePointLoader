@@ -15,24 +15,24 @@ resource = os.getenv('RESOURCE')
 
 client = SharePointClient(tenant_id, client_id, client_secret, resource)
 site_id = client.get_site_id(site_url)
-print("Site ID:", site_id)
+# print("Site ID:", site_id)
 
 drive_info = client.get_drive_id(site_id)
-print("Root folder:", drive_info)
+# print("Root folder:", drive_info)
 
 drive_id = drive_info[0]['id']  # Assume the first drive ID
 folder_content = client.get_folder_content(site_id, drive_id)
 print("Root Content:", folder_content)
 
-folder_id = folder_content[0]['id']
+folder_id = folder_content[3]['id']
 
 contents = client.list_folder_contents(site_id, drive_id, folder_id)
 
-for content in contents:
-    print(f"Name: {content['name']}, Type: {content['type']}, MimeType: {content.get('mimeType', 'N/A')}, Path: {content['path']}")
+# for content in contents:
+#     print(f"Name: {content['name']}, Type: {content['type']}, MimeType: {content.get('mimeType', 'N/A')}, Path: {content['path']}")
 
-local_save_path = "data"
-download = client.download_folder_contents(site_id, drive_id, folder_id, local_save_path)
+# local_save_path = "data"
+# download = client.download_folder_contents(site_id, drive_id, folder_id, local_save_path)
 
 text_splitter = CharacterTextSplitter(separator="\n", 
                                       chunk_size=200, 
