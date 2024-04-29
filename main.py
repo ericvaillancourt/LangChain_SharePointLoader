@@ -24,7 +24,7 @@ drive_id = drive_info[0]['id']  # Assume the first drive ID
 folder_content = client.get_folder_content(site_id, drive_id)
 print("Root Content:", folder_content)
 
-folder_id = folder_content[3]['id']
+folder_id = folder_content[4]['id']
 
 contents = client.list_folder_contents(site_id, drive_id, folder_id)
 
@@ -35,7 +35,7 @@ contents = client.list_folder_contents(site_id, drive_id, folder_id)
 # download = client.download_folder_contents(site_id, drive_id, folder_id, local_save_path)
 
 text_splitter = CharacterTextSplitter(separator="\n", 
-                                      chunk_size=200, 
+                                      chunk_size=50, 
                                       chunk_overlap=0)
 
 for content in contents:
