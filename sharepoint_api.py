@@ -47,15 +47,32 @@ class SharePointClient:
         return [({'id': drive['id'], 'name': drive['name']}) for drive in drives]
 
     def get_folder_content(self, site_id, drive_id, folder_path='root'):
-        # Get the contents of a folder
-        folder_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root/children'
+        # Build the URL to access the contents of the specified folder
+        folder_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/{folder_path}/children'
         response = requests.get(folder_url, headers={'Authorization': f'Bearer {self.access_token}'})
         items_data = response.json()
         rootdir = []
+        
         if 'value' in items_data:
             for item in items_data['value']:
-                rootdir.append(({'id': item['id'], 'name': item['name']}))
+                if 'folder' in item:
+                    item_type = 'folder'
+                    mime_type = None  # No MIME type for folders
+                elif 'file' in item:
+                    item_type = 'file'
+                    mime_type = item['file'].get('mimeType', 'unknown')  # Retrieve MIME type if it's a file
+                else:
+                    item_type = 'unknown'
+                    mime_type = None
+
+                rootdir.append({
+                    'id': item['id'],
+                    'name': item['name'],
+                    'type': item_type,
+                    'mimeType': mime_type  # Add MIME type information
+                })
         return rootdir
+
 
     # Recursive function to browse folders
     def list_folder_contents(self, site_id, drive_id, folder_id, level=0):
@@ -232,7 +249,7 @@ class CustomExcelLoader(BaseLoader):
 
     def load_and_split(self, text_splitter=None):
         # Use pandas to load the Excel file from the binary stream
-        xls = pd.ExcelFile(self.stream)
+        xls = pd.ExcelFile(self.stream, engine='openpyxl')
         # Get the list of all sheet names in the workbook
         sheet_names = xls.sheet_names
 
