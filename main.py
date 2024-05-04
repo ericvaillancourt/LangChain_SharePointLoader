@@ -21,7 +21,7 @@ drive_info = client.get_drive_id(site_id)
 # print("Root folder:", drive_info)
 
 drive_id = drive_info[0]['id']  # Assume the first drive ID
-folder_content = client.get_folder_content(site_id, drive_id)
+folder_content = client.list_folder_contents(site_id, drive_id)
 print("Root Content:", folder_content)
 
 folder_id = folder_content[4]['id']
