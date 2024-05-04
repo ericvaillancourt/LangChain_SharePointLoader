@@ -23,6 +23,15 @@ class SharePointClient:
         self.access_token = self.get_access_token()  # Initialize and store the access token upon instantiation
 
     def get_access_token(self):
+        """
+    This function retrieves an access token from Microsoft's OAuth2 endpoint.
+    
+    The access token is used to authenticate and authorize the application for 
+    accessing Microsoft Graph API resources.
+
+    Returns:
+    str: The access token as a string. This token is used for authentication in subsequent API requests.
+    """
         # Body for the access token request
         body = {
             'grant_type': 'client_credentials',
@@ -34,48 +43,103 @@ class SharePointClient:
         return response.json().get('access_token')  # Extract access token from the response
 
     def get_site_id(self, site_url):
+        """
+    This function retrieves the ID of a SharePoint site using the Microsoft Graph API.
+    
+    Parameters:
+    site_url (str): The URL of the SharePoint site.
+
+    Returns:
+    str: The ID of the SharePoint site.
+    """
         # Build URL to request site ID
         full_url = f'https://graph.microsoft.com/v1.0/sites/{site_url}'
         response = requests.get(full_url, headers={'Authorization': f'Bearer {self.access_token}'})
         return response.json().get('id')  # Return the site ID
 
     def get_drive_id(self, site_id):
+        """
+    This function retrieves the IDs and names of all drives associated with a specified SharePoint site.
+    
+    Parameters:
+    site_id (str): The ID of the SharePoint site.
+
+    Returns:
+    list: A list of dictionaries. Each dictionary represents a drive on the SharePoint site.
+          Each dictionary contains the following keys:
+          - 'id': The ID of the drive.
+          - 'name': The name of the drive.
+    """
         # Retrieve drive IDs and names associated with a site
         drives_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives'
         response = requests.get(drives_url, headers={'Authorization': f'Bearer {self.access_token}'})
         drives = response.json().get('value', [])
         return [({'id': drive['id'], 'name': drive['name']}) for drive in drives]
 
-    def get_folder_content(self, site_id, drive_id, folder_path='root'):
-        # Build the URL to access the contents of the specified folder
-        folder_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/{folder_path}/children'
-        response = requests.get(folder_url, headers={'Authorization': f'Bearer {self.access_token}'})
-        items_data = response.json()
-        rootdir = []
+
+    def get_folder_id(self, site_id, drive_id, folder_path):
+        """
+        This function retrieves the ID of a specified subfolder.
         
-        if 'value' in items_data:
+        Parameters:
+        site_id (str): The ID of the site where the subfolder is located.
+        drive_id (str): The ID of the drive where the subfolder is located.
+        folder_path (str): The path of the subfolder whose ID is to be retrieved.
+
+        Returns:
+        str: The ID of the specified subfolder.
+        """
+
+        # Split the folder path into individual folders
+        folders = folder_path.split('/')
+
+        # Start with the root folder
+        current_folder_id = 'root'
+
+        # Loop through each folder in the path
+        for folder_name in folders:
+            # Build the URL to access the contents of the current folder
+            folder_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{current_folder_id}/children'
+            response = requests.get(folder_url, headers={'Authorization': f'Bearer {self.access_token}'})
+            items_data = response.json()
+
+            # Loop through the items and find the folder
             for item in items_data['value']:
-                if 'folder' in item:
-                    item_type = 'folder'
-                    mime_type = None  # No MIME type for folders
-                elif 'file' in item:
-                    item_type = 'file'
-                    mime_type = item['file'].get('mimeType', 'unknown')  # Retrieve MIME type if it's a file
-                else:
-                    item_type = 'unknown'
-                    mime_type = None
+                if 'folder' in item and item['name'] == folder_name:
+                    # Update the current folder ID and break the loop
+                    current_folder_id = item['id']
+                    break
+            else:
+                # If the folder was not found, return None
+                return None
 
-                rootdir.append({
-                    'id': item['id'],
-                    'name': item['name'],
-                    'type': item_type,
-                    'mimeType': mime_type  # Add MIME type information
-                })
-        return rootdir
+        # Return the ID of the final folder in the path
+        return current_folder_id
 
 
-    # Recursive function to browse folders
-    def list_folder_contents(self, site_id, drive_id, folder_id, level=0):
+    def list_folder_contents(self, site_id, drive_id, folder_id='root', level=0):
+        """
+    This function retrieves the contents of a specific folder from a SharePoint site using the Microsoft Graph API.
+    
+    Parameters:
+    site_id (str): The ID of the SharePoint site.
+    drive_id (str): The ID of the drive on the SharePoint site.
+    folder_id (str): The ID of the folder whose contents are to be retrieved.
+    level (int, optional): The current level of recursion (for internal use). Defaults to 0.
+
+    Returns:
+    list: A list of dictionaries. Each dictionary represents an item (file or folder) in the specified folder.
+          Each dictionary contains the following keys:
+          - 'id': The ID of the item.
+          - 'name': The name of the item.
+          - 'type': The type of the item ('file' or 'folder').
+          - 'mimeType': The MIME type of the item (for files) or 'Folder' (for folders).
+          - 'uri': The download URL of the item (for files) or None (for folders).
+          - 'path': The path of the item relative to the root of the drive.
+          - 'fullpath': The full path of the item including its name.
+          - 'filename': The name of the item (for files) or an empty string (for folders).
+          - 'url': The web URL of the item on the SharePoint site.
+    """
         # Get the contents of a specific folder
         folder_contents_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{folder_id}/children'
         contents_headers = {'Authorization': f'Bearer {self.access_token}'}
@@ -91,33 +155,67 @@ class SharePointClient:
                 path = path_parts[1] if len(path_parts) > 1 else ''
                 full_path = f"{path}/{item['name']}" if path else item['name']
 
+                # Modify the site_web_url to point to the specific item
+                item_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{item["id"]}'
+                response = requests.get(item_url, headers={'Authorization': f'Bearer {self.access_token}'})
+                item_data = response.json()
+                item_web_url = item_data.get('webUrl', '')
+
                 if 'folder' in item:
                     # Add folder to list
                     items_list.append(
-                        {'id': item['id'], 'name': item['name'], 'type': 'Folder', 'mimeType': None, 'uri': None,
-                         'path': full_path})
+                        {'id': item['id'], 'name': item['name'], 'type': 'folder', 'mimeType': 'Folder', 'uri': None,
+                        'path': path, 'fullpath': full_path, 'filename': '', 'url': item_web_url})
                     # Recursive call for subfolders
                     items_list.extend(self.list_folder_contents(site_id, drive_id, item['id'], level + 1))
                 elif 'file' in item:
                     # Add file to the list with its mimeType and uri
                     items_list.append(
-                        {'id': item['id'], 'name': item['name'], 'type': 'File', 'mimeType': item['file']['mimeType'],
-                         'uri': item['@microsoft.graph.downloadUrl'], 'path': full_path})
+                        {'id': item['id'], 'name': item['name'], 'type': 'file', 'mimeType': item['file']['mimeType'],
+                        'uri': item['@microsoft.graph.downloadUrl'], 'path': path, 'fullpath': full_path, 'path': path, 
+                        'filename': item['name'], 'url': item_web_url})
 
         return items_list
 
+
+
     def download_file(self, download_url, local_path, file_name):
+        """
+    This function downloads a file from a specified URL and saves it to a local path.
+    
+    Parameters:
+    download_url (str): The URL of the file to be downloaded.
+    local_path (str): The local path where the file will be saved.
+    file_name (str): The name of the file to be saved.
+
+    Returns:
+    None. The function prints a success message if the file is downloaded and saved successfully, 
+    or an error message if the download fails.
+    """
         headers = {'Authorization': f'Bearer {self.access_token}'}
         response = requests.get(download_url, headers=headers)
         if response.status_code == 200:
             full_path = os.path.join(local_path, file_name)
             with open(full_path, 'wb') as file:
                 file.write(response.content)
-            print(f"File downloaded: {full_path}")
+            # print(f"File downloaded: {full_path}")
         else:
             print(f"Failed to download {file_name}: {response.status_code} - {response.reason}")
 
     def download_folder_contents(self, site_id, drive_id, folder_id, local_folder_path, level=0):
+        """
+    This function recursively downloads all contents from a specified folder on a SharePoint site.
+    
+    Parameters:
+    site_id (str): The ID of the SharePoint site.
+    drive_id (str): The ID of the drive on the SharePoint site.
+    folder_id (str): The ID of the folder whose contents are to be downloaded.
+    local_folder_path (str): The local path where the downloaded files will be saved.
+    level (int, optional): The current level of recursion (folder depth). Defaults to 0 for the root folder.
+
+    Returns:
+    None. The function saves the downloaded files to the specified local path and prints a success message for each downloaded file.
+    """
         # Recursively download all contents from a folder
         folder_contents_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{folder_id}/children'
         contents_headers = {'Authorization': f'Bearer {self.access_token}'}
@@ -138,25 +236,71 @@ class SharePointClient:
                     self.download_file(file_download_url, local_folder_path, file_name)
 
     def download_file_contents(self, site_id, drive_id, file_id, local_save_path):
-        # Get the file details
-        file_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}'
-        headers = {'Authorization': f'Bearer {self.access_token}'}
-        response = requests.get(file_url, headers=headers)
-        file_data = response.json()
+        """
+        This function downloads the contents of a specified file from a SharePoint site and saves it to a local path.
+        
+        Parameters:
+        site_id (str): The ID of the SharePoint site.
+        drive_id (str): The ID of the drive on the SharePoint site.
+        file_id (str): The ID of the file to be downloaded.
+        local_save_path (str): The local path where the downloaded file will be saved.
 
-        # Get the download URL and file name
-        download_url = file_data['@microsoft.graph.downloadUrl']
-        file_name = file_data['name']
+        Returns:
+        bool: True if the file was successfully downloaded and saved, False otherwise.
+        """
+        try:
+            # Get the file details
+            file_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}'
+            headers = {'Authorization': f'Bearer {self.access_token}'}
+            response = requests.get(file_url, headers=headers)
+            file_data = response.json()
 
-        # Download the file
-        self.download_file(download_url, local_save_path, file_name)
+            # Get the download URL and file name
+            download_url = file_data['@microsoft.graph.downloadUrl']
+            file_name = file_data['name']
+            sharepoint_file_path = file_data['parentReference']['path']  # This is the SharePoint file path
+            index = sharepoint_file_path.find(":/")
+
+            # Extract everything after ":/"
+            if index != -1:
+                extracted_path = sharepoint_file_path[index+2:]  # Adding 2 to skip the characters ":/"
+                local_save_path = local_save_path + "/" + extracted_path
+                os.makedirs(local_save_path, exist_ok=True) # create loclal sub-folder
+            else:
+                extracted_path = ""
+            # print(f"Downloading {file_name} from {extracted_path}")   
+            
+            # Download the file
+            self.download_file(download_url, local_save_path, file_name)
+
+            # If no exception was raised, the file download was successful
+            return True
+
+        except requests.exceptions.RequestException as e:
+            print(f"Error downloading file: {file_name} err: {e}")
+            return False
 
     def load_sharepoint_document(self, site_id, drive_id, file_id, file_name, file_type):
+        """
+    This function retrieves a document from a SharePoint site and loads it into memory using a custom loader based on the file type.
+    
+    Parameters:
+    site_id (str): The ID of the SharePoint site.
+    drive_id (str): The ID of the drive on the SharePoint site.
+    file_id (str): The ID of the file to be loaded.
+    file_name (str): The name of the file to be loaded.
+    file_type (str): The MIME type of the file to be loaded.
+
+    Returns:
+    object: A custom loader object that can handle the content of the loaded file. The type of the loader depends on the file type.
+    """
         # Get the download URL and the file name by querying the Microsoft Graph API
         file_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{file_id}'
         headers = {'Authorization': f'Bearer {self.access_token}'}  # Use the stored access token for authorization
         response = requests.get(file_url, headers=headers)  # Make the HTTP request to get file details
         file_data = response.json()  # Parse the JSON response to get file data
+        # print(file_data)
+
         download_url = file_data['@microsoft.graph.downloadUrl']  # Extract the direct download URL from the response
 
         # Get the file content from the download URL
@@ -187,11 +331,21 @@ class SharePointClient:
             loader = CustomTextLoader(stream, file_name)
             return loader
         else:
+            print(f"Unsupported file type: {file_type}")
             pass  # Placeholder for additional file types that may need to be implemented in the future
 
 
 
 class CustomPDFLoader(BaseLoader):
+    """
+    This class is a custom loader for PDF files. It inherits from the BaseLoader class.
+    
+    The class is initialized with a binary stream of the PDF file, the file name, an optional password for protected PDFs, 
+    and a flag indicating whether to extract images from the PDF. 
+    
+    The load method converts the binary stream into a Blob object, parses the PDF, and converts each page or segment 
+    into a separate document object. The file name is added as metadata to each document.
+    """
     def __init__(self, stream: BytesIO, filename: str, password: Optional[Union[str, bytes]] = None,
                  extract_images: bool = False):
         # Initialize with a binary stream, file name, optional password, and an image extraction flag
@@ -213,6 +367,14 @@ class CustomPDFLoader(BaseLoader):
         return documents
 
 class CustomWordLoader(BaseLoader):
+    """
+    This class is a custom loader for Word documents. It extends the BaseLoader class and overrides its methods.
+    It uses the python-docx library to parse Word documents and optionally splits the text into manageable documents.
+    
+    Attributes:
+    stream (io.BytesIO): A binary stream of the Word document.
+    filename (str): The name of the Word document.
+    """
     def __init__(self, stream, filename: str):
         # Initialize with a binary stream and filename
         self.stream = stream
@@ -242,6 +404,15 @@ class CustomWordLoader(BaseLoader):
         return split_text
 
 class CustomExcelLoader(BaseLoader):
+    """
+    This class is a custom loader for Excel files. It inherits from the BaseLoader class.
+    
+    The class takes a binary stream of an Excel file and a filename as input, and provides a method to load the Excel file into memory and split its content into separate documents based on the sheets in the workbook.
+    
+    Attributes:
+    stream (io.BytesIO): A binary stream of the Excel file.
+    filename (str): The name of the Excel file.
+    """
     def __init__(self, stream, filename: str):
         # Initialize with a binary stream and filename
         self.stream = stream
@@ -276,6 +447,15 @@ class CustomExcelLoader(BaseLoader):
         return split_sheets
 
 class CustomPPTLoader(BaseLoader):
+    """
+    This class is a custom loader for PowerPoint files. It inherits from the BaseLoader class.
+    
+    The class takes a binary stream of a PowerPoint file and a filename as input, and provides a method to load the PowerPoint file into memory and split its content into separate documents based on the slides in the presentation.
+    
+    Attributes:
+    stream (io.BytesIO): A binary stream of the PowerPoint file.
+    filename (str): The name of the PowerPoint file.
+    """
     def __init__(self, stream, filename):
         # Initialize with a binary stream and filename
         self.stream = stream
@@ -296,6 +476,7 @@ class CustomPPTLoader(BaseLoader):
             if text_splitter is None:
                 # Treat each slide's text as a single document
                 doc = {'text': slide_text, 'metadata': {'source': self.filename, 'page': i + 1}}
+                # doc = {'text': slide_text, 'metadata': {'source': self.filename}}
                 documents.append(doc)
             else:
                 # Use the splitter to divide the slide text into smaller documents
@@ -303,6 +484,7 @@ class CustomPPTLoader(BaseLoader):
                 # Add metadata and collect each document
                 for doc in split_text:
                     doc.metadata = {'source': self.filename, 'page': i + 1}
+                    # doc.metadata = {'source': self.filename}
                 documents.extend(split_text)
 
         return documents
@@ -312,6 +494,15 @@ class CustomPPTLoader(BaseLoader):
 import chardet
 
 class CustomTextLoader(BaseLoader):
+    """
+    This class is a custom loader for text files. It inherits from the BaseLoader class.
+    
+    The class takes a binary stream of a text file and a filename as input, and provides a method to load the text file into memory and split its content into separate documents.
+    
+    Attributes:
+    stream (io.BytesIO): A binary stream of the text file.
+    filename (str): The name of the text file.
+    """
     def __init__(self, stream, filename: str):
         self.stream = stream
         self.filename = filename
