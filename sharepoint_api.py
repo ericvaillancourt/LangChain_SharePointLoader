@@ -116,69 +116,50 @@ class SharePointClient:
         # Return the ID of the final folder in the path
         return current_folder_id
 
-
-    def list_folder_contents(self, site_id, drive_id, folder_id='root', level=0):
+    def list_folder_contents(self, site_id, drive_id, folder_id='root'):
         """
-    This function retrieves the contents of a specific folder from a SharePoint site using the Microsoft Graph API.
-    
+    This function lists the contents of a specific folder in a drive on a site.
+
     Parameters:
-    site_id (str): The ID of the SharePoint site.
-    drive_id (str): The ID of the drive on the SharePoint site.
-    folder_id (str): The ID of the folder whose contents are to be retrieved.
-    level (int, optional): The current level of recursion (for internal use). Defaults to 0.
+    site_id (str): The ID of the site.
+    drive_id (str): The ID of the drive.
+    folder_id (str, optional): The ID of the folder. Defaults to 'root'.
 
     Returns:
-    list: A list of dictionaries. Each dictionary represents an item (file or folder) in the specified folder.
-          Each dictionary contains the following keys:
-          - 'id': The ID of the item.
-          - 'name': The name of the item.
-          - 'type': The type of the item ('file' or 'folder').
-          - 'mimeType': The MIME type of the item (for files) or 'Folder' (for folders).
-          - 'uri': The download URL of the item (for files) or None (for folders).
-          - 'path': The path of the item relative to the root of the drive.
-          - 'fullpath': The full path of the item including its name.
-          - 'filename': The name of the item (for files) or an empty string (for folders).
-          - 'url': The web URL of the item on the SharePoint site.
+    list: A list of dictionaries. Each dictionary contains details about an item in the folder.
+          The details include 'id', 'name', 'type', 'mimeType', 'uri', 'path', 'fullpath', 'filename', and 'url'.
     """
-        # Get the contents of a specific folder
+        items_list = []
         folder_contents_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{folder_id}/children'
-        contents_headers = {'Authorization': f'Bearer {self.access_token}'}
-        contents_response = requests.get(folder_contents_url, headers=contents_headers)
-        folder_contents = contents_response.json()
+        while folder_contents_url:
+                contents_response = requests.get(folder_contents_url, headers={'Authorization': f'Bearer {self.access_token}'})
+                folder_contents = contents_response.json()
+                for item in folder_contents.get('value', []):
+                    path_parts = item['parentReference']['path'].split('root:')
+                    path = path_parts[1] if len(path_parts) > 1 else ''
+                    full_path = f"{path}/{item['name']}" if path else item['name']
+                    
+                    # Modifiez le site_web_url pour pointer vers l'élément spécifique
+                    item_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{item["id"]}'
+                    response = requests.get(item_url, headers={'Authorization': f'Bearer {self.access_token}'})
+                    item_data = response.json()
+                    item_web_url = item_data.get('webUrl', '')
 
-        items_list = []  # List to store information
-
-        if 'value' in folder_contents:
-            for item in folder_contents['value']:
-                # Split the path on 'root:' and take the second part, if it exists
-                path_parts = item['parentReference']['path'].split('root:')
-                path = path_parts[1] if len(path_parts) > 1 else ''
-                full_path = f"{path}/{item['name']}" if path else item['name']
-
-                # Modify the site_web_url to point to the specific item
-                item_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/items/{item["id"]}'
-                response = requests.get(item_url, headers={'Authorization': f'Bearer {self.access_token}'})
-                item_data = response.json()
-                item_web_url = item_data.get('webUrl', '')
-
-                if 'folder' in item:
-                    # Add folder to list
-                    items_list.append(
-                        {'id': item['id'], 'name': item['name'], 'type': 'folder', 'mimeType': 'Folder', 'uri': None,
-                        'path': path, 'fullpath': full_path, 'filename': '', 'url': item_web_url})
-                    # Recursive call for subfolders
-                    items_list.extend(self.list_folder_contents(site_id, drive_id, item['id'], level + 1))
-                elif 'file' in item:
-                    # Add file to the list with its mimeType and uri
-                    items_list.append(
-                        {'id': item['id'], 'name': item['name'], 'type': 'file', 'mimeType': item['file']['mimeType'],
-                        'uri': item['@microsoft.graph.downloadUrl'], 'path': path, 'fullpath': full_path, 'path': path, 
-                        'filename': item['name'], 'url': item_web_url})
-
+                    items_list.append({
+                        'id': item['id'],
+                        'name': item['name'],
+                        'type': 'folder' if 'folder' in item else 'file',
+                        'mimeType': item['file']['mimeType'] if 'file' in item else '',
+                        'uri': item.get('@microsoft.graph.downloadUrl', ''),
+                        'path': path,
+                        'fullpath': full_path,
+                        'filename': item['name'],
+                        'url': item_web_url
+                    })
+                folder_contents_url = folder_contents.get('@odata.nextLink')
         return items_list
 
-
-
+    
     def download_file(self, download_url, local_path, file_name):
         """
     This function downloads a file from a specified URL and saves it to a local path.
@@ -198,9 +179,10 @@ class SharePointClient:
             full_path = os.path.join(local_path, file_name)
             with open(full_path, 'wb') as file:
                 file.write(response.content)
-            # print(f"File downloaded: {full_path}")
+            print(f"File downloaded: {full_path}")
         else:
             print(f"Failed to download {file_name}: {response.status_code} - {response.reason}")
+
 
     def download_folder_contents(self, site_id, drive_id, folder_id, local_folder_path, level=0):
         """
@@ -234,7 +216,6 @@ class SharePointClient:
                     file_name = item['name']
                     file_download_url = f"{self.resource_url}/v1.0/sites/{site_id}/drives/{drive_id}/items/{item['id']}/content"
                     self.download_file(file_download_url, local_folder_path, file_name)
-
     def download_file_contents(self, site_id, drive_id, file_id, local_save_path):
         """
         This function downloads the contents of a specified file from a SharePoint site and saves it to a local path.
@@ -279,6 +260,19 @@ class SharePointClient:
         except requests.exceptions.RequestException as e:
             print(f"Error downloading file: {file_name} err: {e}")
             return False
+
+    def download_all_files(self, site_id, drive_id, local_folder_path):
+        self.recursive_download(site_id, drive_id, 'root', local_folder_path)
+
+    def recursive_download(self, site_id, drive_id, folder_id, local_path):
+        folder_contents = self.list_folder_contents(site_id, drive_id, folder_id)
+        for item in folder_contents:
+            if item['type'] == 'folder':
+                new_local_path = os.path.join(local_path, item['name'])
+                os.makedirs(new_local_path, exist_ok=True)
+                self.recursive_download(site_id, drive_id, item['id'], new_local_path)
+            elif item['type'] == 'file':
+                self.download_file(item['uri'], local_path, item['name'])
 
     def load_sharepoint_document(self, site_id, drive_id, file_id, file_name, file_type):
         """
