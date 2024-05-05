@@ -32,6 +32,10 @@ try:
 except Exception as e:
     print(f"Error getting drive ID: {e}")
     exit(1)
-
+sharepoint_path = "folder_name/sub_folder_name" # Specify the path to the folder you want to download from Sharepoint
 local_save_path = "data"
+
 client.download_all_files(site_id, drive_id, local_save_path)
+
+# if you want to download for a particular path
+# client.download_all_files(site_id, drive_id, local_save_path, sharepoint_path)

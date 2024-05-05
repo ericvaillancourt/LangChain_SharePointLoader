@@ -2,7 +2,9 @@ from typing import List, Optional, Union
 import pandas as pd
 import requests
 import os
+import urllib.parse
 import io
+import platform
 from io import BytesIO
 from langchain_core.document_loaders import Blob
 from langchain_core.documents.base import Document
@@ -11,6 +13,20 @@ from langchain_core.document_loaders.base import BaseLoader
 from docx import Document as DocxDocument
 from pptx import Presentation
 
+
+def ensure_directory_exists(file_path):
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+
+def get_long_path(path):
+    # Check if the operating system is Windows
+    if platform.system() == 'Windows':
+        # Apply the \\?\ prefix correctly to handle long paths on Windows
+        return '\\\\?\\' + os.path.abspath(path).strip()
+    else:
+        # Return the normal path for Unix-based systems
+        return os.path.abspath(path)
 
 class SharePointClient:
     def __init__(self, tenant_id, client_id, client_secret, resource_url):
@@ -177,9 +193,11 @@ class SharePointClient:
         response = requests.get(download_url, headers=headers)
         if response.status_code == 200:
             full_path = os.path.join(local_path, file_name)
+            full_path = get_long_path(full_path)  # Apply the long path fix conditionally based on the OS
+            ensure_directory_exists(full_path) 
             with open(full_path, 'wb') as file:
                 file.write(response.content)
-            print(f"File downloaded: {full_path}")
+            # print(f"File downloaded: {full_path}")
         else:
             print(f"Failed to download {file_name}: {response.status_code} - {response.reason}")
 
@@ -261,18 +279,54 @@ class SharePointClient:
             print(f"Error downloading file: {file_name} err: {e}")
             return False
 
-    def download_all_files(self, site_id, drive_id, local_folder_path):
-        self.recursive_download(site_id, drive_id, 'root', local_folder_path)
+    def download_all_files(self, site_id, drive_id, local_folder_path, sharepoint_path="root"):
+        """
+        This method initiates the download of all files from a specific drive on a site.
+
+        Args:
+            site_id (str): The ID of the site from which files are to be downloaded.
+            drive_id (str): The ID of the drive on the site from which files are to be downloaded.
+            local_folder_path (str): The local path where the downloaded files should be stored.
+        """
+        try:
+            if sharepoint_path != "root":
+                folder_id = self.get_folder_id(site_id, drive_id, sharepoint_path)
+            else:
+                folder_id = sharepoint_path
+
+            self.recursive_download(site_id, drive_id, folder_id, local_folder_path)
+        except Exception as e:
+            print(f"An error occurred while downloading files: {e}")
 
     def recursive_download(self, site_id, drive_id, folder_id, local_path):
-        folder_contents = self.list_folder_contents(site_id, drive_id, folder_id)
-        for item in folder_contents:
-            if item['type'] == 'folder':
-                new_local_path = os.path.join(local_path, item['name'])
+        """
+        This method downloads files from a folder and its subfolders recursively.
+
+        Args:
+            site_id (str): The ID of the site from which files are to be downloaded.
+            drive_id (str): The ID of the drive on the site from which files are to be downloaded.
+            folder_id (str): The ID of the folder from which files are to be downloaded.
+            local_path (str): The local path where the downloaded files should be stored.
+        """
+        try:
+            folder_contents = self.list_folder_contents(site_id, drive_id, folder_id)
+            for item in folder_contents:
+                sharepoint_path = item['path']
+                sharepoint_path = sharepoint_path.lstrip('/')
+                new_local_path = os.path.normpath(os.path.join(local_path, sharepoint_path))
+                # Ensure the local directory exists before downloading
+                #"data2\\BASIC STUDIES\\1. Cross Category
+                #os.makedirs("data2\\BASIC STUDIES\\1. Cross Category", exist_ok=True)
+                
                 os.makedirs(new_local_path, exist_ok=True)
-                self.recursive_download(site_id, drive_id, item['id'], new_local_path)
-            elif item['type'] == 'file':
-                self.download_file(item['uri'], local_path, item['name'])
+                if item['type'] == 'folder':
+                    self.recursive_download(site_id, drive_id, item['id'], local_path)
+                elif item['type'] == 'file':
+                    # os.makedirs(os.path.dirname(new_local_path), exist_ok=True)
+                    self.download_file(item['uri'], new_local_path, item['name'])
+        except Exception as e:
+            print(f"An error occurred while recursively downloading files:{new_local_path} {e}")
+
 
     def load_sharepoint_document(self, site_id, drive_id, file_id, file_name, file_type):
         """
