@@ -11,7 +11,7 @@ DOCUMENT_LIBRARY_ID = os.environ.get('DOCUMENT_LIBRARY_ID')
 loader = SharePointLoader(
     document_library_id=DOCUMENT_LIBRARY_ID, 
     folder_path="/txt", 
-    auth_with_token=True)
+    auth_with_token=False)
 #
 documents = loader.load()
 print(documents)
